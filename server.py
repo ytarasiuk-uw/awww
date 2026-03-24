@@ -22,6 +22,7 @@ LOCK = threading.Lock()
 
 def read_file(path):
     public_root = os.path.abspath("public")
+    print(path) #!!!
     abs_path    = os.path.abspath(os.path.join("public", path.lstrip("/")))
 
     if not abs_path.startswith(public_root + os.sep):
@@ -36,16 +37,33 @@ def read_file(path):
     except FileNotFoundError:
         return b"<h1>404 Not Found</h1>", "404 Not Found", "text/html"
 
+def parse_post_body(request_data : str):
+    # The body is separated from headers by a blank line
+    parts = request_data.split("\r\n\r\n", 1)
+    if len(parts) < 2:
+        return {}
+    body : str = parts[1]
+    if body == '':
+        return {}
+    # TODO: Split body by '&', then each pair by '='.
+    # Apply unquote_plus() to both key and value — browsers encode
+    # spaces as '+' and special chars as %XX (e.g. "Hello+World%21").
+    # Return a dict like {"name": "Alice", "email": "..."}
+    return {unquote_plus(entry.split('=')[0]): unquote_plus(entry.split('=')[1]) for entry in body.split('&')}
+
 def parse_request(client_connection):
     request_data = client_connection.recv(1024).decode('utf-8')
     if not request_data:
-        return ""
+        return "", ""
     
     first_line = request_data.split('\n')[0]
     path = first_line.split()[1]
     
+    body = parse_post_body(request_data)
+
     print(f"--- Received Request ---\nPath: {path}\n------------------------")
-    return path
+
+    return path, body
 
 def generate_response(content : str, status_code="200 OK", mime="text/html"):
     if isinstance(content, str):
@@ -62,10 +80,47 @@ def generate_response(content : str, status_code="200 OK", mime="text/html"):
     response_str = (status_line + headers + sep).encode() + content
     return response_str
 
-def respond(path, client_connection):
-    global VISITOR_COUNT
+# ----------------------
+#   Response Handlers 
+# ----------------------
 
-    content, status, mime = read_file(path if path != "/" else "/index.html")
+def handle_home(path, body):
+    return read_file("/index.html")
+
+def handle_submit(path, body):
+    
+    content, status, mime = read_file("/submit.html")
+
+    if body:
+        name = body.get('name', 'N/A')
+        email = body.get('email', 'N/A')
+        message = body.get('message', '').strip()
+        
+        html_text = content.decode('utf-8')
+        
+        html_text = html_text.replace("{{name}}", name)
+        html_text = html_text.replace("{{email}}", email)
+        html_text = html_text.replace("{{message}}", message)
+        
+        content = html_text.encode('utf-8')
+        
+    return content, status, mime
+
+ROUTES = {
+    "/": handle_home,
+    "/submit": handle_submit
+}
+
+# Response maker
+def respond(path, body, client_connection):
+    global VISITOR_COUNT
+    
+    if path in ROUTES:
+        handler_function = ROUTES[path]
+        content, status, mime = handler_function(path, body)
+    else:
+        content, status, mime = read_file(path)
+
     response = generate_response(content, status, mime)
 
     with LOCK:
@@ -86,18 +141,6 @@ def server_init():
     print("Server running on http://localhost:8000 ...")
     return server_socket
 
-def parse_post_body(request_data):
-    # The body is separated from headers by a blank line
-    parts = request_data.split("\r\n\r\n", 1)
-    if len(parts) < 2:
-        return {}
-    body = parts[1]
-    # TODO: Split body by '&', then each pair by '='.
-    # Apply unquote_plus() to both key and value — browsers encode
-    # spaces as '+' and special chars as %XX (e.g. "Hello+World%21").
-    # Return a dict like {"name": "Alice", "email": "..."}
-    return {}
-
 def main():
     global VISITOR_COUNT
 
@@ -109,9 +152,9 @@ def main():
         client_connection, client_address = server_socket.accept()
         print(f"Connection received from {client_address}!")
         
-        path = parse_request(client_connection)
+        path, body = parse_request(client_connection)
 
-        t = threading.Thread(target=respond, args=(path, client_connection,))
+        t = threading.Thread(target=respond, args=(path, body, client_connection,))
         threads.append(t)
         t.start()
 
