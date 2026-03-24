@@ -1,0 +1,8 @@
+{% extends "pages/base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+    <h1>Hello, {{ name }}!</h1>
+    <a href="{% url 'home' %}">Home</a>
+{% endblock %}

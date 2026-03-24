@@ -105,6 +105,10 @@ nav ul {
     gap: var(--spacing-md);
 }
 
+ul {
+    margin-left: 1rem;
+}
+
 nav ul li a {
     display: block;
     padding: 0.5rem 1rem;
@@ -227,6 +231,7 @@ input[type="text"],
 input[type="email"],
 textarea {
     width: 100%;
+    max-width: 100%;
     padding: 10px;
     border: 1px solid var(--dark-color);
     border-radius: 6px;
@@ -253,7 +258,6 @@ button[type="submit"] {
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
-    transition: background-color 0.2s ease;
 }
 
 button[type="submit"]:hover {
