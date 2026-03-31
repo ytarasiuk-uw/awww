@@ -39,14 +39,15 @@ ALL_PROJECTS = [
 
 def projects(request):
     q = request.GET.get("q", "")
-    # TODO: if q is non-empty, filter ALL_PROJECTS so only entries whose name
-    #       or lang contains q (case-insensitive) are kept; otherwise show all
-    project_list = ALL_PROJECTS  # replace this line
-    done_count = project_list.count()
+    print(f".{q}.")
+    if q:
+        project_list = [project for project in ALL_PROJECTS if q in project['name']]
+    else:
+        project_list = ALL_PROJECTS
+    done_count = len([project for project in project_list if project['done']])
     context = {
         "project_list": project_list,
         "done_count": done_count,
         "q": q
-        # TODO: pass project_list, done_count, and q
     }
     return render(request, "pages/projects.html", context)
