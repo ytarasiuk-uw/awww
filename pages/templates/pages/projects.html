@@ -2,27 +2,33 @@
 
 {% block title %}Projects{% endblock %}
 
-{% block extra_head %}Finished: {{ done_count }}, total: {{ project_list|length }}{% endblock %}
-
 {% block content %}
-    <div class="flex-column">
+    <h1>Projects</h1>
+    <section>
+        <p>
+            You have <strong>{{ project_list|length }}</strong> project{{ project_list|length|pluralize }} 
+            {% if q %}matching "{{ q }}"{% endif %}
+        </p>
         <form action="/projects/" method="GET">
             <label for="q">Search for project</label>
-            <input type="text" id="q" name="q" value="{{ q }}">
+            <input 
+                type="text" 
+                id="q" 
+                name="q" 
+                value="{{ q }}"
+                placeholder="Filter by name or language">
             <button type="submit">Search</button>
+            {% if q %}
+                <a href="{% url 'projects' %}">Clear</a>
+            {% endif %}
         </form>
-        {% if q and project_list.len > 0 %}
-            <p>Showing results for "{{ q }}"</p>
-        {% endif %}
+    </section>
+    <div class="flex-column">
         <ul>
             {% for project in project_list %}
                 <li>
-                    {% if project.done %}
-                        ✅
-                    {% else %}
-                        🔄
-                    {% endif %}
-                    {{ project.name }}
+                    <span>{% if project.done %}✅{% else %}🔄{% endif %}</span>
+                    <span>{{ project.name }} • {{ project.lang }} • {{ project.year }}-{{ project.year|add:1 }}</span>
                 </li>
             {% empty %}
                 <li>No entries found.</li>

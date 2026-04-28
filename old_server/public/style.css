@@ -110,7 +110,6 @@ ul {
 }
 
 nav ul li a {
-    display: block;
     padding: 0.5rem 1rem;
     border-radius: 4px;
 }

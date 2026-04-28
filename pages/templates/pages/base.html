@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    {% load socialaccount %}
     {% load static %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,11 +11,22 @@
 </head>
 <body>
     <header>
-        <nav>
+        <nav style="display: flex; gap: 1rem; align-items: center;">
             <a href="{% url 'home' %}">Home</a>
             <a href="{% url 'about' %}">About</a>
             <a href="{% url 'projects' %}">Projects</a>
             <a href="{% url 'blog:post-list' %}">Blog</a>
+            <a href="{% url 'guestbook' %}">Guestbook</a>
+            <a href="{% url 'profile' %}">Profile</a>
+            {% if user.is_authenticated %}
+                <form action="{% url 'logout' %}" method="post" style="display: inline; margin: 0;">
+                    {% csrf_token %}
+                    <button type="submit" style="margin: 0; max-width: fit-content;">Logout</button>
+                </form>
+            {% else %}
+                <a href="{% url 'login' %}">Login</a>
+                <a href="{% provider_login_url 'github' %}">Login w/ GitHub</a>
+            {% endif %}
         </nav>
     </header>
 
