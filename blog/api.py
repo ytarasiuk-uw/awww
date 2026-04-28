@@ -1,122 +1,129 @@
-import json
-from django.http import JsonResponse
-from django.views import View
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
-from requests import post
+from django.shortcuts import get_object_or_404
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
+
+from drf_spectacular.utils import extend_schema, OpenApiResponse
+
 from .models import Post, Comment
+from .serializers import CommentListResponseSerializer, PostListResponseSerializer, PostSerializer, CommentSerializer
 
-def post_to_dict(post):
-    return {
-        "id":       post.id,
-        "title":    post.title,
-        "slug":     post.slug,
-        "body":     post.body,
-        "pub_date": post.pub_date.isoformat(),
-        "category": post.category.name if post.category else None,
-    }
+class PostListView(APIView):
+    # This single line replaces all your manual `request.user.is_authenticated` checks!
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
-@method_decorator(csrf_exempt, name="dispatch")
-class PostListView(View):
-
+    @extend_schema(
+        request=None,
+        responses={
+            200: OpenApiResponse(description="List of posts returned.", response=PostListResponseSerializer),
+        },
+    )
     def get(self, request):
         posts = Post.objects.all()
-        return JsonResponse({"posts": [post_to_dict(p) for p in posts]})
+        serializer = PostSerializer(posts, many=True)
+        # We can still return the exact dict structure you had before
+        return Response({"posts": serializer.data, "from": "api"})
 
+    @extend_schema(
+        request=PostSerializer,
+        responses={
+            201: OpenApiResponse(description="Post created successfully.", response=PostSerializer),
+            400: OpenApiResponse(description="Invalid input."),
+        },
+    )
     def post(self, request):
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required."}, status=401)
-
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON."}, status=400)
-
-        if not all(field in data for field in ["title", "slug", "body"]):
-            return JsonResponse({"error": "All fields are required: title, slug, body."}, status=400)
+        # request.data automatically handles json.loads() for you
+        serializer = PostSerializer(data=request.data)
         
-        post = Post.objects.create(
-            title=data["title"],
-            slug=data["slug"],
-            body=data["body"]
-        )
-        
-        return JsonResponse(post_to_dict(post), status=201)
-    
-@method_decorator(csrf_exempt, name="dispatch")
-class PostDetailView(View):
+        # This replaces your manual field-checking (title, slug, body)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-    def get_post(self, pk):
-        try:
-            return Post.objects.get(pk=pk)
-        except Post.DoesNotExist:
-            return None
+class PostDetailView(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
+    @extend_schema(
+        request=None,
+        responses={
+            200: OpenApiResponse(description="Post retrieved successfully.", response=PostSerializer),
+            404: OpenApiResponse(description="Post not found."),
+        },
+    )
     def get(self, request, pk):
-        post = self.get_post(pk)
-        if post is None:
-            return JsonResponse({"error": "Not found."}, status=404)
-        return JsonResponse(post_to_dict(post))
+        # get_object_or_404 automatically returns your 404 response if missing
+        post = get_object_or_404(Post, pk=pk)
+        serializer = PostSerializer(post)
+        return Response(serializer.data)
 
+    @extend_schema(
+        request=PostSerializer,
+        responses={
+            200: OpenApiResponse(description="Post updated successfully.", response=PostSerializer),
+            400: OpenApiResponse(description="Invalid input."),
+            404: OpenApiResponse(description="Post not found."),
+        },
+    )
     def patch(self, request, pk):
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required."}, status=401)
-        post = self.get_post(pk)
-        if post is None:
-            return JsonResponse({"error": "Not found."}, status=404)
-
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON."}, status=400)
+        post = get_object_or_404(Post, pk=pk)
         
-        if data.get("title") is not None:
-            post.title = data["title"]
-        if data.get("body") is not None:
-            post.body = data["body"]
-        if data.get("slug") is not None:
-            post.slug = data["slug"]
-        post.save()
-		
-        return JsonResponse(post_to_dict(post))
+        # partial=True tells DRF that it's okay if not all fields are provided
+        serializer = PostSerializer(post, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+            
+        return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        request=None,
+        responses={
+            204: OpenApiResponse(description="Post deleted successfully."),
+            404: OpenApiResponse(description="Post not found."),
+        },
+    )
     def delete(self, request, pk):
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required."}, status=401)
-        post = self.get_post(pk)
-        if post is None:
-            return JsonResponse({"error": "Not found."}, status=404)
+        post = get_object_or_404(Post, pk=pk)
         post.delete()
-        return JsonResponse({}, status=204)
-    
-@method_decorator(csrf_exempt, name="dispatch")
-class PostCommentView(View):
-    """GET/POST comments for a given post."""
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
+class PostCommentView(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    @extend_schema(
+        request=None,
+        responses={
+            200: OpenApiResponse(description="List of comments for the post.", response=CommentListResponseSerializer),
+            404: OpenApiResponse(description="Post not found."),
+        },
+    )
     def get(self, request, pk):
-        post = Post.objects.filter(pk=pk).first()
-        if post is None:
-            return JsonResponse({"error": "Not found."}, status=404)
+        post = get_object_or_404(Post, pk=pk)
         comments = post.comments.filter(active=True)
-        data = [
-            {
-                "id":      c.id,
-                "author":  c.author,
-                "body":    c.body,
-                "created": c.created.isoformat(),
-            }
-            for c in comments
-        ]
-        return JsonResponse({"comments": data})
+        serializer = CommentSerializer(comments, many=True)
+        return Response({"comments": serializer.data})
 
+    @extend_schema(
+        request=CommentSerializer,
+        responses={
+            201: OpenApiResponse(description="Comment created successfully.", response=CommentSerializer),
+            400: OpenApiResponse(description="Invalid input."),
+            404: OpenApiResponse(description="Post not found."),
+        },
+    )
     def post(self, request, pk):
-        post = Post.objects.filter(pk=pk).first()
-        if post is None:
-            return JsonResponse({"error": "Not found."}, status=404)
+        post = get_object_or_404(Post, pk=pk)
         
-        Comment.objects.create(
-            post=post,
-            active=True,
-            body=request.body.decode("utf-8"),
-        )
-        return JsonResponse({}, status=201)
+        # Note: Your old code accepted raw text: request.body.decode()
+        # DRF expects JSON. The client must send: {"body": "My comment text", "author": "..."}
+        serializer = CommentSerializer(data=request.data)
+        if serializer.is_valid():
+            # You can pass extra kwargs to save() to auto-fill model fields
+            serializer.save(post=post, active=True)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)

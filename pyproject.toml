@@ -8,6 +8,8 @@ dependencies = [
     "django>=6.0.3",
     "django-allauth>=65.16.1",
     "django-debug-toolbar>=6.3.0",
+    "djangorestframework>=3.17.1",
+    "drf-spectacular>=0.29.0",
     "python-dotenv>=1.2.2",
     "requests>=2.33.1",
 ]
